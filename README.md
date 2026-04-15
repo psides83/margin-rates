@@ -8,6 +8,7 @@ Lightweight personal scraper for TradeStation Futures Margin Requirements.
 - Scrapes the public TradeStation futures margin table
 - Writes latest data to `docs/data/latest.json`
 - Writes change snapshots to `docs/data/history/*.json`
+- Adds a `category` field to each contract row based on TradeStation section grouping
 - Serves JSON from GitHub Pages
 
 ## JSON URL (after Pages is enabled)

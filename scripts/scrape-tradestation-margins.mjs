@@ -42,13 +42,28 @@ function toCamelCase(input) {
   return slug.replace(/_([a-z0-9])/g, (_, ch) => ch.toUpperCase());
 }
 
-function extractFirstTable(html) {
-  const match = html.match(/<table[\s\S]*?<\/table>/i);
-  if (!match) throw new Error('Could not find a table on the source page.');
-  return match[0];
+function extractCategoryTables(html) {
+  const tokenRegex = /<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>|<table[\s\S]*?<\/table>/gi;
+  const pairs = [];
+  let currentCategory = 'Uncategorized';
+
+  for (const tokenMatch of html.matchAll(tokenRegex)) {
+    const token = tokenMatch[0];
+
+    if (/^<h[1-6]/i.test(token)) {
+      const heading = stripHtml(token);
+      if (heading) currentCategory = heading;
+      continue;
+    }
+
+    pairs.push({ category: currentCategory, tableHtml: token });
+  }
+
+  if (pairs.length === 0) throw new Error('Could not find table sections on the source page.');
+  return pairs;
 }
 
-function parseTable(tableHtml) {
+function parseTable(tableHtml, category) {
   const headerMatches = [...tableHtml.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/gi)];
   if (headerMatches.length === 0) throw new Error('Could not find table headers.');
 
@@ -57,6 +72,7 @@ function parseTable(tableHtml) {
 
   const rowMatches = [...tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
   const rows = [];
+  let currentCategory = category;
 
   for (const rowMatch of rowMatches) {
     const rowHtml = rowMatch[1];
@@ -64,9 +80,12 @@ function parseTable(tableHtml) {
     if (cellMatches.length === 0) continue;
 
     const values = cellMatches.map((m) => stripHtml(m[1]));
-    if (values.length < 2) continue;
+    if (values.length === 1) {
+      currentCategory = values[0] || currentCategory;
+      continue;
+    }
 
-    const row = {};
+    const row = { category: currentCategory };
     for (let i = 0; i < keys.length; i += 1) {
       row[keys[i]] = values[i] ?? '';
     }
@@ -108,8 +127,16 @@ async function main() {
   }
 
   const html = await response.text();
-  const tableHtml = extractFirstTable(html);
-  const { headers, rows } = parseTable(tableHtml);
+  const categoryTables = extractCategoryTables(html);
+
+  let headers = null;
+  const rows = [];
+
+  for (const section of categoryTables) {
+    const parsed = parseTable(section.tableHtml, section.category);
+    if (!headers && parsed.headers.length > 0) headers = parsed.headers;
+    rows.push(...parsed.rows);
+  }
 
   if (rows.length === 0) {
     throw new Error('Parsed zero data rows from margin table.');
@@ -123,7 +150,7 @@ async function main() {
     fetchedAtUtc: now.toISOString(),
     sourceHash: sourceHash,
     rowCount: rows.length,
-    headers,
+    headers: headers ?? [],
     contracts: rows,
   };
 
