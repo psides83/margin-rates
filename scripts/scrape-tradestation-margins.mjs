@@ -204,12 +204,11 @@ function parseTable(tableHtml, categoryMap) {
     const inferredFromText = inferCategoryFromProduct(row.productDescription, symbolRoot);
     const resolvedCategory =
       attrCategory ||
-      (currentCategory !== 'Uncategorized' ? currentCategory : null) ||
       inferredFromSymbol ||
       inferredFromText ||
+      (currentCategory !== 'Uncategorized' ? currentCategory : null) ||
       'Uncategorized';
     row.category = resolvedCategory;
-    currentCategory = resolvedCategory;
     rows.push(row);
   }
 
