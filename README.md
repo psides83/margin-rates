@@ -28,9 +28,9 @@ Lightweight personal scraper for TradeStation Futures Margin Requirements.
 
 ## Schedule
 
-Current cron is every 15 minutes on weekdays (UTC):
+Current scrape window is every 15 minutes, weekdays, from 5:00 AM to 3:00 PM America/Chicago.
 
-`*/15 * * * 1-5`
+The workflow uses UTC cron plus a Central Time guard to stay correct across DST.
 
 Adjust the cron in `.github/workflows/scrape-tradestation-margins.yml` as needed.
 

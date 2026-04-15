@@ -3,7 +3,7 @@ name: Scrape TradeStation Futures Margins
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/15 * * * 1-5'
+    - cron: '*/15 10-21 * * 1-5'
 
 permissions:
   contents: write
@@ -20,10 +20,26 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Check Central Time Window
+        id: time_window
+        run: |
+          hour="$(TZ=America/Chicago date +%H)"
+          weekday="$(TZ=America/Chicago date +%u)"
+
+          if [ "$weekday" -ge 1 ] && [ "$weekday" -le 5 ] && [ "$hour" -ge 5 ] && [ "$hour" -lt 15 ]; then
+            echo "run_scrape=true" >> "$GITHUB_OUTPUT"
+            echo "Inside allowed window (5:00-14:59 America/Chicago)."
+          else
+            echo "run_scrape=false" >> "$GITHUB_OUTPUT"
+            echo "Outside allowed window; skipping scrape."
+          fi
+
       - name: Run scraper
+        if: steps.time_window.outputs.run_scrape == 'true'
         run: node scripts/scrape-tradestation-margins.mjs
 
       - name: Commit and push if data changed
+        if: steps.time_window.outputs.run_scrape == 'true'
         run: |
           if git diff --quiet; then
             echo "No changes to commit."
