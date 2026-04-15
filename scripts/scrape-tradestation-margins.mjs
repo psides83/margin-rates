@@ -11,28 +11,26 @@ const rootDir = path.resolve(__dirname, '..');
 const dataDir = path.join(rootDir, 'docs', 'data');
 const historyDir = path.join(dataDir, 'history');
 const latestPath = path.join(dataDir, 'latest.json');
-const explicitCategoryBySymbol = new Map([
-  ['BO', 'Agriculture'], ['C', 'Agriculture'], ['CB', 'Agriculture'], ['DA', 'Agriculture'],
-  ['DY', 'Agriculture'], ['KW', 'Agriculture'], ['MZC', 'Agriculture'], ['MZL', 'Agriculture'],
-  ['MZM', 'Agriculture'], ['MZS', 'Agriculture'], ['MZW', 'Agriculture'], ['O', 'Agriculture'],
-  ['RR', 'Agriculture'], ['S', 'Agriculture'], ['SM', 'Agriculture'], ['W', 'Agriculture'],
-  ['YC', 'Agriculture'], ['YK', 'Agriculture'], ['YW', 'Agriculture'],
-  ['BTC', 'Crypto'], ['ETH', 'Crypto'], ['MBT', 'Crypto'], ['MET', 'Crypto'], ['MXP', 'Crypto'],
-  ['QBTC', 'Crypto'], ['QETH', 'Crypto'], ['QSOL', 'Crypto'], ['QXRP', 'Crypto'], ['XRP', 'Crypto'],
-  ['RF', 'Currencies'], ['RP', 'Currencies'], ['RY', 'Currencies'], ['AD', 'Currencies'],
-  ['BP', 'Currencies'], ['BR', 'Currencies'], ['CD', 'Currencies'], ['DX', 'Currencies'],
-  ['E7', 'Currencies'], ['EC', 'Currencies'], ['J7', 'Currencies'], ['JY', 'Currencies'],
-  ['M6A', 'Currencies'], ['M6B', 'Currencies'], ['M6E', 'Currencies'], ['MP1', 'Currencies'],
-  ['NE1', 'Currencies'], ['RA', 'Currencies'], ['RU', 'Currencies'], ['SF', 'Currencies'],
-  ['ATW', 'Energy'], ['BRN', 'Energy'], ['CL', 'Energy'], ['HO', 'Energy'], ['MCL', 'Energy'],
-  ['MHO', 'Energy'], ['MNG', 'Energy'], ['MRB', 'Energy'], ['NG', 'Energy'], ['QH', 'Energy'],
-  ['QM', 'Energy'], ['QN', 'Energy'], ['QU', 'Energy'], ['RB', 'Energy'], ['UHO', 'Energy'],
-  ['UHU', 'Energy'], ['ULS', 'Energy'], ['WBS', 'Energy'],
-  ['1OZ', 'Metals'], ['ALI', 'Metals'], ['GC', 'Metals'], ['HG', 'Metals'], ['HRC', 'Metals'],
-  ['MGC', 'Metals'], ['MHG', 'Metals'], ['PA', 'Metals'], ['PL', 'Metals'], ['PLM', 'Metals'],
-  ['QC', 'Metals'], ['QI', 'Metals'], ['QO', 'Metals'], ['SI', 'Metals'], ['SIC', 'Metals'],
-  ['SIL', 'Metals'], ['UX', 'Metals'],
-]);
+const explicitCategoryGroups = {
+  Agriculture: ['HRS', 'BO', 'C', 'CB', 'DA', 'DY', 'KW', 'MZC', 'MZL', 'MZM', 'MZS', 'MZW', 'O', 'RR', 'S', 'SM', 'W', 'YC', 'YK', 'YW'],
+  Crypto: ['MSL', 'SOL', 'BTC', 'ETH', 'MBT', 'MET', 'MXP', 'QBTC', 'QETH', 'QSOL', 'QXRP', 'XRP'],
+  Currencies: ['RF', 'RP', 'RY', 'AD', 'BP', 'BR', 'CD', 'DX', 'E7', 'EC', 'J7', 'JY', 'M6A', 'M6B', 'M6E', 'MP1', 'NE1', 'RA', 'RU', 'SF'],
+  Energy: ['ATW', 'BRN', 'CL', 'HO', 'MCL', 'MHO', 'MNG', 'MRB', 'NG', 'QH', 'QM', 'QN', 'QU', 'RB', 'UHO', 'UHU', 'ULS', 'WBS'],
+  'Eurex Index': ['FDAX', 'FDXM', 'FDXS', 'FEBD', 'FESB', 'FESX', 'FEXD', 'FLCP', 'FSCP', 'FSTB', 'FSTG', 'FSTI', 'FSTL', 'FSTM', 'FSTU', 'FSTV', 'FSTX', 'FSTZ', 'FSXE', 'FTDX', 'FXXP', 'FVS'],
+  'Eurex Interest Rate': ['FBTP', 'FBTS', 'FGBL', 'FGBM', 'FGBS', 'FGBX', 'FOAT', 'SA3'],
+  'Euronext LIFFE': ['LT2', 'CC3', 'CW', 'RC', 'G', 'H', 'LJ', 'LZ', 'SO3'],
+  Index: ['ENY', 'NIY', 'EMD', 'ES', 'M2K', 'MES', 'MFS', 'MMC', 'MME', 'MNK', 'MNQ', 'MSC', 'MYM', 'NK', 'NQ', 'QDOW', 'QNDX', 'QRTY', 'QSPX', 'R2G', 'R2V', 'RTY', 'SMC', 'VX', 'VXM', 'XAB', 'XAE', 'XAF', 'XAI', 'XAK', 'XAP', 'XAU', 'XAV', 'XAY', 'YM'],
+  'Interest Rate': ['10Y', '2YY', '30Y', '5YY', 'FF', 'FV', 'MTN', 'MWN', 'SR1', 'SR3', 'TBF3', 'TEN', 'TU', 'TWE', 'TY', 'UB', 'US'],
+  Meats: ['FC', 'LC', 'LH'],
+  Metals: ['1OZ', 'ALI', 'GC', 'HG', 'HRC', 'MGC', 'MHG', 'PA', 'PL', 'PLM', 'QC', 'QI', 'QO', 'SI', 'SIC', 'SIL', 'UX'],
+  Soft: ['CC', 'CJ', 'CT', 'KC', 'KT', 'LBR', 'OJ', 'SB', 'TT', 'YO'],
+};
+
+const explicitCategoryBySymbol = new Map(
+  Object.entries(explicitCategoryGroups).flatMap(([category, symbols]) =>
+    symbols.map((symbol) => [symbol, category]),
+  ),
+);
 
 function decodeEntities(input) {
   return input
@@ -81,12 +79,15 @@ function inferCategoryFromProduct(productDescription = '', symbolRoot = '') {
   if (/(dollar|yen|franc|peso|rand|ruble|eur\/|gbp|aud|cad|currency|forex)/.test(text)) return 'Currencies';
   if (/(crude|heating oil|natural gas|gasoline|gasoil|brent|coal|wti|energy)/.test(text)) return 'Energy';
   if (/(gold|silver|copper|platinum|palladium|uranium|aluminum|metal|steel)/.test(text)) return 'Metals';
-  if (/(cattle|hogs|livestock)/.test(text)) return 'Livestock';
-  if (/(cocoa|coffee|cotton|sugar|lumber|fcoj|softs|robusta)/.test(text)) return 'Softs';
+  if (/(cattle|hogs|livestock|meat)/.test(text)) return 'Meats';
+  if (/(cocoa|coffee|cotton|sugar|lumber|fcoj|softs|robusta)/.test(text)) return 'Soft';
   if (/(treasury|yield|federal funds|sofr|euribor|saron|sonia|gilt|bund|bobl|schatz|buxl|oat|btp|interest rate)/.test(text)) {
-    return 'Interest Rates';
+    if (/(bund|bobl|schatz|buxl|oat|btp|euribor|saron)/.test(text)) return 'Eurex Interest Rate';
+    if (/(sonia|gilt|liffe)/.test(text)) return 'Euronext LIFFE';
+    return 'Interest Rate';
   }
-  if (/(s&p|nasdaq|dow|russell|nikkei|dax|stoxx|vix|ftse|msci|equity|index)/.test(text)) return 'Equities';
+  if (/(dax|stoxx)/.test(text)) return 'Eurex Index';
+  if (/(s&p|nasdaq|dow|russell|nikkei|vix|ftse|msci|equity|index)/.test(text)) return 'Index';
 
   return null;
 }
