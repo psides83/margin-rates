@@ -42,46 +42,116 @@ function toCamelCase(input) {
   return slug.replace(/_([a-z0-9])/g, (_, ch) => ch.toUpperCase());
 }
 
-function extractCategoryTables(html) {
-  const tokenRegex = /<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>|<table[\s\S]*?<\/table>/gi;
-  const pairs = [];
-  let currentCategory = 'Uncategorized';
-
-  for (const tokenMatch of html.matchAll(tokenRegex)) {
-    const token = tokenMatch[0];
-
-    if (/^<h[1-6]/i.test(token)) {
-      const heading = stripHtml(token);
-      if (heading) currentCategory = heading;
-      continue;
-    }
-
-    pairs.push({ category: currentCategory, tableHtml: token });
-  }
-
-  if (pairs.length === 0) throw new Error('Could not find table sections on the source page.');
-  return pairs;
+function normalizeCategoryKey(input) {
+  return String(input || '')
+    .toLowerCase()
+    .replace(/[.#]/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
 }
 
-function parseTable(tableHtml, category) {
+function buildCategoryMapFromFilters(html) {
+  const map = new Map();
+  const filterRegex =
+    /<(button|a|li)[^>]*\bdata-(?:category|filter|group|sector|type|target)=["']([^"']+)["'][^>]*>([\s\S]*?)<\/\1>/gi;
+
+  for (const match of html.matchAll(filterRegex)) {
+    const rawKey = match[2];
+    const label = stripHtml(match[3]);
+    const key = normalizeCategoryKey(rawKey);
+
+    if (!key || !label) continue;
+    if (key === 'all' || key === '*') continue;
+
+    map.set(key, label);
+  }
+
+  return map;
+}
+
+function withDefaultCategoryFallbacks(map) {
+  const defaults = {
+    agriculture: 'Agriculture',
+    crypto: 'Crypto',
+    cryptocurrency: 'Crypto',
+    currencies: 'Currencies',
+    currency: 'Currencies',
+    energy: 'Energy',
+    equities: 'Equities',
+    equity: 'Equities',
+    indices: 'Indices',
+    index: 'Indices',
+    interestRates: 'Interest Rates',
+    'interest rates': 'Interest Rates',
+    livestock: 'Livestock',
+    metals: 'Metals',
+    softs: 'Softs',
+    rates: 'Interest Rates',
+  };
+
+  for (const [key, label] of Object.entries(defaults)) {
+    const normalizedKey = normalizeCategoryKey(key);
+    if (!map.has(normalizedKey)) map.set(normalizedKey, label);
+  }
+
+  return map;
+}
+
+function extractAllTables(html) {
+  const tables = [...html.matchAll(/<table[\s\S]*?<\/table>/gi)].map((m) => m[0]);
+  if (tables.length === 0) throw new Error('Could not find table sections on the source page.');
+  return tables;
+}
+
+function parseRowCategory(attrs, categoryMap) {
+  const dataAttrRegex =
+    /\bdata-(?:category|filter|group|sector|type|target|tags?)=["']([^"']+)["']/gi;
+  for (const match of attrs.matchAll(dataAttrRegex)) {
+    const key = normalizeCategoryKey(match[1]);
+    if (!key) continue;
+    if (categoryMap.has(key)) return categoryMap.get(key);
+  }
+
+  const classMatch = attrs.match(/\bclass=["']([^"']+)["']/i);
+  if (classMatch) {
+    const classTokens = classMatch[1].split(/\s+/).filter(Boolean);
+    for (const token of classTokens) {
+      const key = normalizeCategoryKey(token);
+      if (categoryMap.has(key)) return categoryMap.get(key);
+    }
+  }
+
+  return null;
+}
+
+function parseTable(tableHtml, categoryMap) {
   const headerMatches = [...tableHtml.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/gi)];
   if (headerMatches.length === 0) throw new Error('Could not find table headers.');
 
   const headers = headerMatches.map((m) => stripHtml(m[1]));
   const keys = headers.map((h) => toCamelCase(h));
+  const requiredHeaders = ['productDescription', 'symbolRoot', 'intradayInitial'];
+  const hasRequiredHeaders = requiredHeaders.every((header) => keys.includes(header));
+  if (!hasRequiredHeaders) return { headers: [], rows: [] };
 
-  const rowMatches = [...tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+  const rowMatches = [...tableHtml.matchAll(/<tr([^>]*)>([\s\S]*?)<\/tr>/gi)];
   const rows = [];
-  let currentCategory = category;
+  let currentCategory = 'Uncategorized';
 
   for (const rowMatch of rowMatches) {
-    const rowHtml = rowMatch[1];
+    const attrs = rowMatch[1] || '';
+    const rowHtml = rowMatch[2];
+    const attrCategory = parseRowCategory(attrs, categoryMap);
+    if (attrCategory) currentCategory = attrCategory;
+
     const cellMatches = [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
     if (cellMatches.length === 0) continue;
 
     const values = cellMatches.map((m) => stripHtml(m[1]));
     if (values.length === 1) {
-      currentCategory = values[0] || currentCategory;
+      const maybeCategory = normalizeCategoryKey(values[0]);
+      if (categoryMap.has(maybeCategory)) currentCategory = categoryMap.get(maybeCategory);
       continue;
     }
 
@@ -127,13 +197,14 @@ async function main() {
   }
 
   const html = await response.text();
-  const categoryTables = extractCategoryTables(html);
+  const categoryMap = withDefaultCategoryFallbacks(buildCategoryMapFromFilters(html));
+  const tables = extractAllTables(html);
 
   let headers = null;
   const rows = [];
 
-  for (const section of categoryTables) {
-    const parsed = parseTable(section.tableHtml, section.category);
+  for (const tableHtml of tables) {
+    const parsed = parseTable(tableHtml, categoryMap);
     if (!headers && parsed.headers.length > 0) headers = parsed.headers;
     rows.push(...parsed.rows);
   }
