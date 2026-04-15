@@ -37,6 +37,11 @@ function slugify(input) {
     .replace(/^_+|_+$/g, '');
 }
 
+function toCamelCase(input) {
+  const slug = slugify(input);
+  return slug.replace(/_([a-z0-9])/g, (_, ch) => ch.toUpperCase());
+}
+
 function extractFirstTable(html) {
   const match = html.match(/<table[\s\S]*?<\/table>/i);
   if (!match) throw new Error('Could not find a table on the source page.');
@@ -48,7 +53,7 @@ function parseTable(tableHtml) {
   if (headerMatches.length === 0) throw new Error('Could not find table headers.');
 
   const headers = headerMatches.map((m) => stripHtml(m[1]));
-  const keys = headers.map((h) => slugify(h));
+  const keys = headers.map((h) => toCamelCase(h));
 
   const rowMatches = [...tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
   const rows = [];
@@ -114,16 +119,16 @@ async function main() {
   const sourceHash = hashContent(JSON.stringify(rows));
 
   const payload = {
-    source_url: SOURCE_URL,
-    fetched_at_utc: now.toISOString(),
-    source_hash: sourceHash,
-    row_count: rows.length,
+    sourceUrl: SOURCE_URL,
+    fetchedAtUtc: now.toISOString(),
+    sourceHash: sourceHash,
+    rowCount: rows.length,
     headers,
     contracts: rows,
   };
 
   const existing = await readExistingLatest();
-  if (existing?.source_hash === sourceHash) {
+  if (existing?.sourceHash === sourceHash) {
     console.log('No change detected in margin table.');
     return;
   }

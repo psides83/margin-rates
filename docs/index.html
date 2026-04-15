@@ -67,7 +67,7 @@
         const data = await res.json();
 
         const meta = document.getElementById('meta');
-        meta.textContent = `Fetched UTC: ${data.fetched_at_utc} | Rows: ${data.row_count}`;
+        meta.textContent = `Fetched UTC: ${data.fetchedAtUtc} | Rows: ${data.rowCount}`;
 
         const table = document.getElementById('table');
         const headers = data.headers || [];
