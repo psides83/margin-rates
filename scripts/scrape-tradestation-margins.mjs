@@ -11,6 +11,28 @@ const rootDir = path.resolve(__dirname, '..');
 const dataDir = path.join(rootDir, 'docs', 'data');
 const historyDir = path.join(dataDir, 'history');
 const latestPath = path.join(dataDir, 'latest.json');
+const explicitCategoryBySymbol = new Map([
+  ['BO', 'Agriculture'], ['C', 'Agriculture'], ['CB', 'Agriculture'], ['DA', 'Agriculture'],
+  ['DY', 'Agriculture'], ['KW', 'Agriculture'], ['MZC', 'Agriculture'], ['MZL', 'Agriculture'],
+  ['MZM', 'Agriculture'], ['MZS', 'Agriculture'], ['MZW', 'Agriculture'], ['O', 'Agriculture'],
+  ['RR', 'Agriculture'], ['S', 'Agriculture'], ['SM', 'Agriculture'], ['W', 'Agriculture'],
+  ['YC', 'Agriculture'], ['YK', 'Agriculture'], ['YW', 'Agriculture'],
+  ['BTC', 'Crypto'], ['ETH', 'Crypto'], ['MBT', 'Crypto'], ['MET', 'Crypto'], ['MXP', 'Crypto'],
+  ['QBTC', 'Crypto'], ['QETH', 'Crypto'], ['QSOL', 'Crypto'], ['QXRP', 'Crypto'], ['XRP', 'Crypto'],
+  ['RF', 'Currencies'], ['RP', 'Currencies'], ['RY', 'Currencies'], ['AD', 'Currencies'],
+  ['BP', 'Currencies'], ['BR', 'Currencies'], ['CD', 'Currencies'], ['DX', 'Currencies'],
+  ['E7', 'Currencies'], ['EC', 'Currencies'], ['J7', 'Currencies'], ['JY', 'Currencies'],
+  ['M6A', 'Currencies'], ['M6B', 'Currencies'], ['M6E', 'Currencies'], ['MP1', 'Currencies'],
+  ['NE1', 'Currencies'], ['RA', 'Currencies'], ['RU', 'Currencies'], ['SF', 'Currencies'],
+  ['ATW', 'Energy'], ['BRN', 'Energy'], ['CL', 'Energy'], ['HO', 'Energy'], ['MCL', 'Energy'],
+  ['MHO', 'Energy'], ['MNG', 'Energy'], ['MRB', 'Energy'], ['NG', 'Energy'], ['QH', 'Energy'],
+  ['QM', 'Energy'], ['QN', 'Energy'], ['QU', 'Energy'], ['RB', 'Energy'], ['UHO', 'Energy'],
+  ['UHU', 'Energy'], ['ULS', 'Energy'], ['WBS', 'Energy'],
+  ['1OZ', 'Metals'], ['ALI', 'Metals'], ['GC', 'Metals'], ['HG', 'Metals'], ['HRC', 'Metals'],
+  ['MGC', 'Metals'], ['MHG', 'Metals'], ['PA', 'Metals'], ['PL', 'Metals'], ['PLM', 'Metals'],
+  ['QC', 'Metals'], ['QI', 'Metals'], ['QO', 'Metals'], ['SI', 'Metals'], ['SIC', 'Metals'],
+  ['SIL', 'Metals'], ['UX', 'Metals'],
+]);
 
 function decodeEntities(input) {
   return input
@@ -49,6 +71,24 @@ function normalizeCategoryKey(input) {
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     .replace(/\s+/g, ' ');
+}
+
+function inferCategoryFromProduct(productDescription = '', symbolRoot = '') {
+  const text = `${productDescription} ${symbolRoot}`.toLowerCase();
+
+  if (/(bitcoin|ether|xrp|solana|crypto)/.test(text)) return 'Crypto';
+  if (/(corn|soybean|wheat|oats|rice|butter|milk|whey|agriculture)/.test(text)) return 'Agriculture';
+  if (/(dollar|yen|franc|peso|rand|ruble|eur\/|gbp|aud|cad|currency|forex)/.test(text)) return 'Currencies';
+  if (/(crude|heating oil|natural gas|gasoline|gasoil|brent|coal|wti|energy)/.test(text)) return 'Energy';
+  if (/(gold|silver|copper|platinum|palladium|uranium|aluminum|metal|steel)/.test(text)) return 'Metals';
+  if (/(cattle|hogs|livestock)/.test(text)) return 'Livestock';
+  if (/(cocoa|coffee|cotton|sugar|lumber|fcoj|softs|robusta)/.test(text)) return 'Softs';
+  if (/(treasury|yield|federal funds|sofr|euribor|saron|sonia|gilt|bund|bobl|schatz|buxl|oat|btp|interest rate)/.test(text)) {
+    return 'Interest Rates';
+  }
+  if (/(s&p|nasdaq|dow|russell|nikkei|dax|stoxx|vix|ftse|msci|equity|index)/.test(text)) return 'Equities';
+
+  return null;
 }
 
 function buildCategoryMapFromFilters(html) {
@@ -155,10 +195,21 @@ function parseTable(tableHtml, categoryMap) {
       continue;
     }
 
-    const row = { category: currentCategory };
+    const row = {};
     for (let i = 0; i < keys.length; i += 1) {
       row[keys[i]] = values[i] ?? '';
     }
+    const symbolRoot = row.symbolRoot || '';
+    const inferredFromSymbol = explicitCategoryBySymbol.get(symbolRoot) || null;
+    const inferredFromText = inferCategoryFromProduct(row.productDescription, symbolRoot);
+    const resolvedCategory =
+      attrCategory ||
+      (currentCategory !== 'Uncategorized' ? currentCategory : null) ||
+      inferredFromSymbol ||
+      inferredFromText ||
+      'Uncategorized';
+    row.category = resolvedCategory;
+    currentCategory = resolvedCategory;
     rows.push(row);
   }
 
