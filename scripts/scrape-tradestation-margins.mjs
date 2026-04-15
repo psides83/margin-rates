@@ -1,0 +1,143 @@
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const SOURCE_URL = 'https://www.tradestation.com/pricing/futures-margin-requirements/';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '..');
+const dataDir = path.join(rootDir, 'docs', 'data');
+const historyDir = path.join(dataDir, 'history');
+const latestPath = path.join(dataDir, 'latest.json');
+
+function decodeEntities(input) {
+  return input
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, '/');
+}
+
+function stripHtml(input) {
+  return decodeEntities(input.replace(/<[^>]+>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function slugify(input) {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function extractFirstTable(html) {
+  const match = html.match(/<table[\s\S]*?<\/table>/i);
+  if (!match) throw new Error('Could not find a table on the source page.');
+  return match[0];
+}
+
+function parseTable(tableHtml) {
+  const headerMatches = [...tableHtml.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/gi)];
+  if (headerMatches.length === 0) throw new Error('Could not find table headers.');
+
+  const headers = headerMatches.map((m) => stripHtml(m[1]));
+  const keys = headers.map((h) => slugify(h));
+
+  const rowMatches = [...tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+  const rows = [];
+
+  for (const rowMatch of rowMatches) {
+    const rowHtml = rowMatch[1];
+    const cellMatches = [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
+    if (cellMatches.length === 0) continue;
+
+    const values = cellMatches.map((m) => stripHtml(m[1]));
+    if (values.length < 2) continue;
+
+    const row = {};
+    for (let i = 0; i < keys.length; i += 1) {
+      row[keys[i]] = values[i] ?? '';
+    }
+    rows.push(row);
+  }
+
+  return { headers, rows };
+}
+
+function hashContent(input) {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+async function readExistingLatest() {
+  try {
+    const raw = await readFile(latestPath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function timestampForFilename(d) {
+  return d.toISOString().replace(/[:]/g, '-').replace(/\.\d{3}Z$/, 'Z');
+}
+
+async function main() {
+  await mkdir(historyDir, { recursive: true });
+
+  const response = await fetch(SOURCE_URL, {
+    headers: {
+      'User-Agent': 'margin-rates-personal-use-bot/1.0 (+github actions)',
+      Accept: 'text/html,application/xhtml+xml',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch source page: ${response.status} ${response.statusText}`);
+  }
+
+  const html = await response.text();
+  const tableHtml = extractFirstTable(html);
+  const { headers, rows } = parseTable(tableHtml);
+
+  if (rows.length === 0) {
+    throw new Error('Parsed zero data rows from margin table.');
+  }
+
+  const now = new Date();
+  const sourceHash = hashContent(JSON.stringify(rows));
+
+  const payload = {
+    source_url: SOURCE_URL,
+    fetched_at_utc: now.toISOString(),
+    source_hash: sourceHash,
+    row_count: rows.length,
+    headers,
+    contracts: rows,
+  };
+
+  const existing = await readExistingLatest();
+  if (existing?.source_hash === sourceHash) {
+    console.log('No change detected in margin table.');
+    return;
+  }
+
+  await writeFile(latestPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+
+  const snapshotPath = path.join(historyDir, `${timestampForFilename(now)}.json`);
+  await writeFile(snapshotPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+
+  console.log(`Updated latest.json with ${rows.length} rows.`);
+  console.log(`Wrote snapshot: ${path.relative(rootDir, snapshotPath)}`);
+}
+
+main().catch((error) => {
+  console.error(error?.stack ?? String(error));
+  process.exit(1);
+});

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TradeStation Futures Margins (Personal Feed)</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f7fb;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #475569;
+        --line: #dbe3ef;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      main {
+        max-width: 900px;
+        margin: 32px auto;
+        padding: 0 16px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 12px;
+      }
+      th, td {
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        padding: 8px;
+        font-size: 13px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      code {
+        background: #eef2ff;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="card">
+        <h1>TradeStation Futures Margins (Personal Feed)</h1>
+        <p class="muted">JSON endpoint: <code>/data/latest.json</code></p>
+        <p class="muted" id="meta">Loading...</p>
+        <table id="table"></table>
+      </div>
+    </main>
+
+    <script>
+      async function run() {
+        const res = await fetch('./data/latest.json', { cache: 'no-store' });
+        const data = await res.json();
+
+        const meta = document.getElementById('meta');
+        meta.textContent = `Fetched UTC: ${data.fetched_at_utc} | Rows: ${data.row_count}`;
+
+        const table = document.getElementById('table');
+        const headers = data.headers || [];
+        const rows = data.contracts || [];
+
+        const thead = document.createElement('thead');
+        const htr = document.createElement('tr');
+        headers.forEach((h) => {
+          const th = document.createElement('th');
+          th.textContent = h;
+          htr.appendChild(th);
+        });
+        thead.appendChild(htr);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        rows.slice(0, 20).forEach((row) => {
+          const tr = document.createElement('tr');
+          Object.keys(row).forEach((key) => {
+            const td = document.createElement('td');
+            td.textContent = row[key];
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+      }
+
+      run().catch((e) => {
+        document.getElementById('meta').textContent = `Failed to load data: ${e.message}`;
+      });
+    </script>
+  </body>
+</html>
